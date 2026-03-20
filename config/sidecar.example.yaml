@@ -2,7 +2,11 @@
 # Copy to sidecar.yaml and adjust for your environment.
 # sidecar.yaml is gitignored — never commit secrets.
 
-socket_path: /tmp/acf.sock        # UDS socket path
+# IPC transport address.
+# Override via ACF_SOCKET_PATH environment variable.
+# Linux/macOS: UDS socket path (default: /tmp/acf.sock)
+# Windows:     Named pipe path (default: \\.\pipe\acf)
+socket_path: /tmp/acf.sock
 
 policy_dir: ./policies/v1         # directory containing Rego files and data/
 
@@ -14,5 +18,5 @@ otel:
   service_name: acf-sidecar
 
 # HMAC key is loaded from the ACF_HMAC_KEY environment variable at startup.
-# Minimum 32 bytes, base64-encoded.
-# Generate: python3 -c "import secrets,base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
+# Minimum 32 bytes, hex-encoded.
+# Generate: python3 -c "import secrets; print(secrets.token_hex(32))"
