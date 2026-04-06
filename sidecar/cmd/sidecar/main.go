@@ -18,7 +18,14 @@ import (
 
 func main() {
 	// 1. Load sidecar config (falls back to defaults if sidecar.yaml absent).
-	cfg, err := config.LoadOrDefault("config/sidecar.yaml")
+	// Config path can be overridden via ACF_CONFIG env var.
+	// Default: ../config/sidecar.yaml — one level up from the sidecar/ directory,
+	// which is the repo root when running with: go run ./sidecar/cmd/sidecar
+	configPath := "../config/sidecar.yaml"
+	if p := os.Getenv("ACF_CONFIG"); p != "" {
+		configPath = p
+	}
+	cfg, err := config.LoadOrDefault(configPath)
 	if err != nil {
 		log.Fatalf("sidecar: config error: %v", err)
 	}

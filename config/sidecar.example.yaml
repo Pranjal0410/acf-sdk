@@ -8,7 +8,7 @@
 # Windows:     Named pipe path (default: \\.\pipe\acf)
 socket_path: /tmp/acf.sock
 
-policy_dir: ./policies/v1         # directory containing Rego files and data/
+policy_dir: ../policies/v1        # relative to the sidecar/ working directory
 
 log_level: info                   # debug | info | warn | error
 
