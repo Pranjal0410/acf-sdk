@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
@@ -27,14 +26,7 @@ func main() {
 		log.Fatalf("sidecar: failed to determine working directory: %v", err)
 	}
 
-	configPath := config.DefaultConfigPath(cwd)
-	if p := os.Getenv("ACF_CONFIG"); p != "" {
-		if filepath.IsAbs(p) {
-			configPath = p
-		} else {
-			configPath = filepath.Clean(filepath.Join(cwd, p))
-		}
-	}
+	configPath := config.ResolveConfigPath(cwd)
 	cfg, err := config.LoadOrDefault(configPath)
 	if err != nil {
 		log.Fatalf("sidecar: config error: %v", err)

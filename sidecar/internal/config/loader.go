@@ -193,7 +193,7 @@ type Patterns struct {
 
 // LoadPatterns reads and parses jailbreak_patterns.json from policyDir.
 func LoadPatterns(policyDir string) (*Patterns, error) {
-	path := policyDir + "/data/jailbreak_patterns.json"
+	path := filepath.Join(policyDir, "data", "jailbreak_patterns.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("config: cannot read patterns file %s: %w", path, err)
@@ -213,6 +213,22 @@ func DefaultConfigPath(startDir string) string {
 		base = root
 	}
 	return filepath.Join(base, "config", "sidecar.yaml")
+}
+
+// ResolveConfigPath returns the config path to load. Resolution order is:
+// ACF_CONFIG when set (using an explicit absolute path as-is, or anchoring a
+// relative value to startDir), then the project-root default, then built-in
+// defaults if the chosen file is missing. Resolution is independent of the
+// process working directory once startDir is chosen, and relative policy_dir
+// values are resolved from the loaded config file location.
+func ResolveConfigPath(startDir string) string {
+	if p := os.Getenv("ACF_CONFIG"); p != "" {
+		if filepath.IsAbs(p) {
+			return filepath.Clean(p)
+		}
+		return filepath.Clean(filepath.Join(startDir, p))
+	}
+	return DefaultConfigPath(startDir)
 }
 
 // ResolvePolicyDir normalises a runtime policy directory. Relative paths are

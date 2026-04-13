@@ -69,6 +69,38 @@ func TestLoadResolvesRelativePolicyDirAgainstConfigFile(t *testing.T) {
 	}
 }
 
+func TestLoadResolvesRelativePolicyDirViaConfigSymlink(t *testing.T) {
+	root := t.TempDir()
+	realConfigDir := filepath.Join(root, "real-config")
+	linkedConfigDir := filepath.Join(root, "config")
+	policyDir := filepath.Join(root, "policies", "v1")
+
+	for _, dir := range []string{realConfigDir, policyDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("MkdirAll(%q): %v", dir, err)
+		}
+	}
+
+	if err := os.Symlink(realConfigDir, linkedConfigDir); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+
+	configPath := filepath.Join(linkedConfigDir, "sidecar.yaml")
+	if err := os.WriteFile(filepath.Join(realConfigDir, "sidecar.yaml"), []byte("policy_dir: ../policies/v1\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	want := filepath.Join(root, "policies", "v1")
+	if cfg.PolicyDir != want {
+		t.Fatalf("PolicyDir via symlink: got %q, want %q", cfg.PolicyDir, want)
+	}
+}
+
 func TestLoadOrDefaultLogsWhenConfigMissing(t *testing.T) {
 	root := makeProjectRoot(t)
 	missingPath := filepath.Join(root, "config", "sidecar.yaml")
@@ -109,9 +141,6 @@ func makeProjectRoot(t *testing.T) string {
 		}
 	}
 
-	if err := os.WriteFile(filepath.Join(root, "config", "sidecar.example.yaml"), []byte(""), 0o644); err != nil {
-		t.Fatalf("WriteFile(sidecar.example.yaml): %v", err)
-	}
 	if err := os.WriteFile(filepath.Join(root, "sidecar", "go.mod"), []byte("module example.com/test\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(go.mod): %v", err)
 	}
