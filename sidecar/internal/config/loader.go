@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -78,6 +80,10 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 
+	// Resolve relative paths from the config file location so the runtime
+	// behaves the same regardless of the process working directory.
+	cfg.PolicyDir = resolveRelative(filepath.Dir(path), cfg.PolicyDir)
+
 	return cfg, nil
 }
 
@@ -86,6 +92,7 @@ func Load(path string) (*Config, error) {
 func LoadOrDefault(path string) (*Config, error) {
 	cfg, err := Load(path)
 	if errors.Is(err, os.ErrNotExist) {
+		log.Printf("config: %s not found, using built-in defaults", path)
 		return defaults(), nil
 	}
 	return cfg, err
@@ -186,7 +193,7 @@ type Patterns struct {
 
 // LoadPatterns reads and parses jailbreak_patterns.json from policyDir.
 func LoadPatterns(policyDir string) (*Patterns, error) {
-	path := policyDir + "/data/jailbreak_patterns.json"
+	path := filepath.Join(policyDir, "data", "jailbreak_patterns.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("config: cannot read patterns file %s: %w", path, err)
@@ -196,4 +203,90 @@ func LoadPatterns(policyDir string) (*Patterns, error) {
 		return nil, fmt.Errorf("config: cannot parse patterns file: %w", err)
 	}
 	return &p, nil
+}
+
+// DefaultConfigPath returns the standard config path for the project that
+// contains startDir. If no project root is found, it falls back to startDir.
+func DefaultConfigPath(startDir string) string {
+	base := startDir
+	if root, err := FindProjectRoot(startDir); err == nil {
+		base = root
+	}
+	return filepath.Join(base, "config", "sidecar.yaml")
+}
+
+// ResolveConfigPath returns the config path to load. Resolution order is:
+// ACF_CONFIG when set (using an explicit absolute path as-is, or anchoring a
+// relative value to startDir), then the project-root default, then built-in
+// defaults if the chosen file is missing. Resolution is independent of the
+// process working directory once startDir is chosen, and relative policy_dir
+// values are resolved from the loaded config file location.
+func ResolveConfigPath(startDir string) string {
+	if p := os.Getenv("ACF_CONFIG"); p != "" {
+		if filepath.IsAbs(p) {
+			return filepath.Clean(p)
+		}
+		return filepath.Clean(filepath.Join(startDir, p))
+	}
+	return DefaultConfigPath(startDir)
+}
+
+// ResolvePolicyDir normalises a runtime policy directory. Relative paths are
+// anchored to the loaded config file when present, otherwise to the project
+// root inferred from startDir.
+func ResolvePolicyDir(policyDir, configPath, startDir string) string {
+	if policyDir == "" || filepath.IsAbs(policyDir) {
+		return filepath.Clean(policyDir)
+	}
+
+	if configPath != "" {
+		if info, err := os.Stat(configPath); err == nil && !info.IsDir() {
+			return resolveRelative(filepath.Dir(configPath), policyDir)
+		}
+	}
+
+	if root, err := FindProjectRoot(startDir); err == nil {
+		return resolveRelative(root, policyDir)
+	}
+
+	return filepath.Clean(policyDir)
+}
+
+// FindProjectRoot walks up from startDir until it finds the repo markers.
+func FindProjectRoot(startDir string) (string, error) {
+	dir, err := filepath.Abs(startDir)
+	if err != nil {
+		return "", fmt.Errorf("config: resolve project root: %w", err)
+	}
+
+	for {
+		if hasProjectMarkers(dir) {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", errors.New("project root not found")
+		}
+		dir = parent
+	}
+}
+
+func hasProjectMarkers(dir string) bool {
+	markers := []string{
+		filepath.Join(dir, "sidecar", "go.mod"),
+		filepath.Join(dir, ".git"),
+	}
+	for _, marker := range markers {
+		if _, err := os.Stat(marker); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+func resolveRelative(baseDir, path string) string {
+	if path == "" || filepath.IsAbs(path) {
+		return filepath.Clean(path)
+	}
+	return filepath.Clean(filepath.Join(baseDir, path))
 }
