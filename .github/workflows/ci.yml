@@ -26,6 +26,26 @@ jobs:
         working-directory: sidecar
         run: go vet ./...
 
+  integration:
+    name: Integration tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: tests/integration/go.sum
+
+      - name: go test
+        working-directory: tests/integration
+        # The harness compiles the sidecar (and OPA) inside TestMain, so a cold
+        # runner with no build cache needs more headroom than the Makefile's 120s.
+        run: go test ./... -v -timeout 300s
+
   python:
     name: Python tests
     runs-on: ubuntu-latest

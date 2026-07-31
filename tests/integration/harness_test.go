@@ -11,10 +11,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -68,7 +68,7 @@ func run(m *testing.M) int {
 	}
 	defer os.RemoveAll(dir)
 
-	socketPath = filepath.Join(dir, "acf.sock")
+	socketPath = harnessSocketPath(dir)
 
 	root, err := filepath.Abs("../..")
 	if err != nil {
@@ -90,7 +90,11 @@ func run(m *testing.M) int {
 		return 1
 	}
 
-	bin := filepath.Join(dir, "sidecar")
+	binName := "sidecar"
+	if runtime.GOOS == "windows" {
+		binName += ".exe"
+	}
+	bin := filepath.Join(dir, binName)
 	build := exec.Command("go", "build", "-o", bin, "./cmd/sidecar")
 	build.Dir = filepath.Join(root, "sidecar")
 	build.Stderr = os.Stderr
@@ -124,7 +128,7 @@ func run(m *testing.M) int {
 func waitForSocket(path string, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if conn, err := net.Dial("unix", path); err == nil {
+		if conn, err := dialSidecar(path); err == nil {
 			_ = conn.Close()
 			return true
 		}
@@ -155,7 +159,7 @@ func send(t *testing.T, pc payloadCase) string {
 		t.Fatalf("encode request: %v", err)
 	}
 
-	conn, err := net.Dial("unix", socketPath)
+	conn, err := dialSidecar(socketPath)
 	if err != nil {
 		t.Fatalf("dial sidecar: %v", err)
 	}
