@@ -54,10 +54,10 @@ class Firewall:
                      Requires: pip install acf-sdk[scanners]
         semantic_signal_threshold:
                      Only semantic hits at or above this similarity (0.0-1.0)
-                     are forwarded as signals to the sidecar. Defaults to
-                     0.85 — high enough to keep TF-IDF surface-overlap noise
-                     out of OPA's view. Lower this when using the
-                     sentence-transformer backend (which has cleaner
+                     are forwarded as signals to the sidecar. When None (the
+                     default), a per-backend value is used: 0.85 for TF-IDF
+                     (high enough to filter surface-overlap noise) and 0.50
+                     for sentence-transformer (which has cleaner score
                      separation between attacks and benign text).
         semantic_backend:
                      Embedding backend for the semantic scanner. Use "tfidf"
@@ -112,6 +112,7 @@ class Firewall:
             enable_semantic_scan = False
 
         self._semantic_scanner = None
+        self._semantic_signal_threshold = None
         if enable_semantic_scan:
             try:
                 from .scanners import SemanticScanner, SemanticScannerConfig
@@ -139,13 +140,16 @@ class Firewall:
                 default_signal_threshold = 0.85
 
             # User-provided threshold wins over per-backend default.
-            self._semantic_signal_threshold = semantic_signal_threshold if semantic_signal_threshold is not None else default_signal_threshold
+            self._semantic_signal_threshold = (
+                semantic_signal_threshold
+                if semantic_signal_threshold is not None
+                else default_signal_threshold
+            )
 
             self._semantic_scanner = SemanticScanner(config=config, backend=resolved_backend)
             logger.info("acf-sdk: semantic scanner enabled (%s backend, signal threshold %.2f)",
                         resolved_backend, self._semantic_signal_threshold)
-        else:
-            self._semantic_signal_threshold = semantic_signal_threshold if semantic_signal_threshold is not None else 0.85
+
     # ── v1 hook call sites ────────────────────────────────────────────────────
 
     def on_prompt(self, text: str) -> Decision | SanitiseResult:

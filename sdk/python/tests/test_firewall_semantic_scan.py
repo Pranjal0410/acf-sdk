@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -218,6 +218,48 @@ class TestSignalThreshold:
         """The default threshold protects against TF-IDF noise — verify it's 0.85."""
         fw = make_firewall(enable_semantic_scan=True)
         assert fw._semantic_signal_threshold == 0.85
+
+
+# ── per-backend threshold calibration ───────────────────────────────────────
+
+
+class TestBackendCalibration:
+    """Per-backend signal thresholds are auto-calibrated; user override wins."""
+
+    def test_tfidf_gets_default_signal_threshold(self, monkeypatch):
+        monkeypatch.delenv("ACF_SEMANTIC_SCAN_BACKEND", raising=False)
+        fw = make_firewall(enable_semantic_scan=True, semantic_backend="tfidf")
+        assert fw._semantic_signal_threshold == 0.85
+
+    def test_sentence_transformer_gets_lower_default(self, monkeypatch):
+        monkeypatch.delenv("ACF_SEMANTIC_SCAN_BACKEND", raising=False)
+        with patch("acf.scanners.SemanticScanner") as mock_cls:
+            mock_cls.return_value = MagicMock()
+            fw = make_firewall(
+                enable_semantic_scan=True,
+                semantic_backend="sentence-transformer",
+            )
+        assert fw._semantic_signal_threshold == 0.50
+
+    def test_user_threshold_wins_over_tfidf_default(self, monkeypatch):
+        monkeypatch.delenv("ACF_SEMANTIC_SCAN_BACKEND", raising=False)
+        fw = make_firewall(
+            enable_semantic_scan=True,
+            semantic_backend="tfidf",
+            semantic_signal_threshold=0.70,
+        )
+        assert fw._semantic_signal_threshold == 0.70
+
+    def test_user_threshold_wins_over_sentence_transformer_default(self, monkeypatch):
+        monkeypatch.delenv("ACF_SEMANTIC_SCAN_BACKEND", raising=False)
+        with patch("acf.scanners.SemanticScanner") as mock_cls:
+            mock_cls.return_value = MagicMock()
+            fw = make_firewall(
+                enable_semantic_scan=True,
+                semantic_backend="sentence-transformer",
+                semantic_signal_threshold=0.70,
+            )
+        assert fw._semantic_signal_threshold == 0.70
 
 
 # ── per-hook payload shapes ──────────────────────────────────────────────────
