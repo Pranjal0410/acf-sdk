@@ -17,7 +17,7 @@ and execution moves on to the model node.
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 from acf import Firewall
-from acf.models import FirewallBlocked
+from acf import FirewallBlocked
 from acf.adapters.langgraph import FirewallNode
 
 

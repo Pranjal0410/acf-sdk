@@ -8,6 +8,7 @@ Public API:
     ChunkResult    — per-chunk result from on_context
     FirewallError  — base exception
     FirewallConnectionError — raised when the sidecar is unreachable
+    FirewallBlocked — raised by adapters on BLOCK decisions
 """
 from .firewall import Firewall
 from .models import (

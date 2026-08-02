@@ -57,6 +57,7 @@ class FirewallError(Exception):
 class FirewallConnectionError(FirewallError):
     """Raised when the transport cannot connect to the sidecar after all retries."""
 
+
 class FirewallBlocked(FirewallError):
     """Raised by framework adapters when the firewall returns BLOCK.
 
