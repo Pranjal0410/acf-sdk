@@ -19,6 +19,8 @@ func harnessSocketPath(dir string) string {
 }
 
 // dialSidecar connects to the harness sidecar over a Windows named pipe.
+// nil timeout: DialPipe returns an error immediately if the pipe isn't ready;
+// the poll loop in waitForSocket handles retries.
 func dialSidecar(address string) (net.Conn, error) {
 	return winio.DialPipe(address, nil)
 }

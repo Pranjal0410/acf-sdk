@@ -1,12 +1,10 @@
-// provenance_forgery_probe_test.go: LOCAL REVIEW PROBE — not part of the suite.
+// TestProvenanceForgeryProbe is a permanent invariant guard: forging the
+// provenance field in RiskContext must never downgrade a verdict.
 //
-// Question: the SDK sets RiskContext.provenance inside the agent process, and
-// aggregate.go multiplies the risk score by cfg.ProvenanceWeight(provenance).
-// If the agent is compromised — the premise of every injection succeeding —
-// the attacker chooses that multiplier. Does claiming a low-trust provenance
-// downgrade a verdict the pipeline would otherwise BLOCK?
-//
-// Reporting only: this test asserts nothing and never fails.
+// Background: the SDK sets RiskContext.provenance inside the agent process, so
+// a compromised agent can supply any value. aggregate.go multiplies the risk
+// score by cfg.ProvenanceWeight(provenance). This test exhaustively checks
+// that no forged provenance reduces a BLOCK or SANITISE to something weaker.
 package integration
 
 import (
@@ -69,6 +67,10 @@ func TestProvenanceForgeryProbe(t *testing.T) {
 		fmt.Fprintf(&b, "  %s\n", d)
 	}
 	t.Log(b.String())
+	if len(downgrades) > 0 {
+		t.Errorf("provenance forgery downgraded %d verdict(s) — pipeline is not provenance-forgery-resistant",
+			len(weakened))
+	}
 }
 
 // rank orders verdicts by strictness so a drop is detectable.
