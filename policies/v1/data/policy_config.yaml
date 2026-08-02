@@ -25,13 +25,39 @@ destination_allowlist:    # permitted network destinations for tool calls; omit 
   - cdn.example.com
 
 signal_weights:          # per-signal contribution to risk score
+  # integrity
+  hmac_invalid: 1.0           # always hard block
+
+  # catch-all backward-compat signal emitted on every pattern hit
   jailbreak_pattern: 0.9
+
+  # prompt / context injection
   instruction_override: 0.85
+  indirect_injection: 0.85    # injected via retrieved documents (RAG)
+  memory_poisoning: 0.85      # long-term state poisoning via memory write
+  tool_description_poisoning: 0.85  # hijacks tool behaviour at definition time
   role_escalation: 0.8
+  context_manipulation: 0.8   # context override injected via retrieved content
+  system_prompt_extraction: 0.8
+  data_exfiltration: 0.8
+
+  # tool / boundary
+  tool:not_allowed: 0.9
+  tool_boundary_violation: 0.8
   shell_metacharacter: 0.75   # was shell_metachar — aligned with tool.rego category name
   path_traversal: 0.75
+
+  # multi-turn
+  multi_turn_manipulation: 0.75
+
+  # evasion / obfuscation
+  encoding_bypass: 0.70
+  delimiter_escape: 0.70
+  unicode_obfuscation: 0.65
   embedded_instruction: 0.65
-  structural_anomaly: 0.40
-  hmac_invalid: 1.0      # always hard block
-  tool:not_allowed: 0.9
+
+  # memory
   memory:key_not_allowed: 0.7
+
+  # low-confidence structural signals
+  structural_anomaly: 0.40
