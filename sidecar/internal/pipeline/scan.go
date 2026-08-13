@@ -78,7 +78,7 @@ func (s *ScanStage) Run(rc *riskcontext.RiskContext) (hardBlock bool) {
 
 	// 1. Aho-Corasick lexical scan with per-category signal emission.
 	if s.matcher != nil && len(text) > 0 {
-		hits := s.matcher.Match([]byte(text))
+		hits := s.matcher.MatchThreadSafe([]byte(text))
 		if len(hits) > 0 {
 			seen := make(map[string]bool)
 			for _, idx := range hits {
