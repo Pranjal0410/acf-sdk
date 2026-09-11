@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "frozen_at": "2026-09-02T11:30:58+01:00",
+  "frozen_at": "2026-09-11T22:19:44+01:00",
   "acf": {
     "repository": "https://github.com/c2siorg/ACF-SDK",
-    "commit": "fe4fea6f89b03cde819195304897bb69d5981751",
+    "commit": "511457818fc90fc3baf30c0ad8731050ea2521e0",
     "artifacts": [
       {
         "path": "policies/v1/data/jailbreak_patterns.json",
@@ -11,11 +11,11 @@
       },
       {
         "path": "policies/v1/data/policy_config.yaml",
-        "sha256": "b5f0fc578f9a9e0092f5a95eab777f1d2d53c0e1a9967b8d43c99e6ffa123f0a"
+        "sha256": "c164836decfc1ac70b922026c2c83484bd3c7147fecaca8280872f798cb31e0e"
       },
       {
         "path": "config/sidecar.yaml",
-        "sha256": "2d257b81b1917c22d9c9680df31b3a42bdedf36c8cd5b16662eacc7d5e2be6ad"
+        "sha256": "84e0284357055eefc5ec4ec667c4f550c621a76b879d3e78645bb0c759e49740"
       },
       {
         "path": "sdk/python/acf/scanners/attack_library.py",
