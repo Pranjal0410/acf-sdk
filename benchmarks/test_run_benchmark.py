@@ -941,3 +941,10 @@ def test_signal_contract_reports_missing_weight_and_rule() -> None:
         "policy_file": "context.rego",
         "policy_direct_rule": False,
     }
+
+
+def test_configured_signal_weights_reads_policy_config() -> None:
+    weights = run_benchmark.configured_signal_weights()
+    assert "memory_poisoning" in weights  # only ever weighted in policy_config.yaml
+    assert "tool:not_allowed" in weights  # a namespaced key must stay whole
+    assert "tool" not in weights

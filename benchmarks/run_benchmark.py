@@ -487,20 +487,24 @@ def scanner_runtime_metadata(
 
 
 def configured_signal_weights() -> set[str]:
-    text = (REPO_ROOT / "config/sidecar.yaml").read_text(encoding="utf-8")
+    # The sidecar scores signals with signal_weights from policy_config.yaml;
+    # config/sidecar.yaml no longer carries a weight table.
+    text = (REPO_ROOT / "policies/v1/data/policy_config.yaml").read_text(encoding="utf-8")
     weights: set[str] = set()
     in_weights = False
     for line in text.splitlines():
-        if line == "signal_weights:":
+        if re.match(r"^signal_weights:\s*(#.*)?$", line):
             in_weights = True
             continue
         if in_weights and line and not line.startswith((" ", "\t")):
             break
         if not in_weights:
             continue
-        match = re.match(r"^  ([^:#][^:]*):", line)
+        # Keys may contain a colon (tool:not_allowed), so match up to the colon
+        # that is followed by whitespace and a number.
+        match = re.match(r"^\s+([^\s#]\S*?):\s+-?[\d.]", line)
         if match:
-            weights.add(match.group(1).strip())
+            weights.add(match.group(1))
     return weights
 
 

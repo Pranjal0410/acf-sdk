@@ -45,7 +45,7 @@ Loads `config/sidecar.yaml` at startup using `gopkg.in/yaml.v3`. Falls back to s
 | `trust_weights` | Provenance → score multiplier |
 | `tool_allowlist` | Permitted tool names for `on_tool_call` (empty = allow all) |
 | `memory_key_allowlist` | Permitted memory keys for `on_memory` (empty = allow all) |
-| `signal_weights` | Signal name → risk score contribution |
+| `signal_weights` | *Moved to `policies/v1/data/policy_config.yaml`; a table here is now ignored. See [pipeline.md](pipeline.md).* |
 
 Helper methods on `Config`:
 
@@ -295,6 +295,7 @@ trust_weights:
   rag: 0.7
   memory: 0.6
 
+# signal_weights has since moved to policies/v1/data/policy_config.yaml
 signal_weights:
   jailbreak_pattern: 0.9
   instruction_override: 0.85

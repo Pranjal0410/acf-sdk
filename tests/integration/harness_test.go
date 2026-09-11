@@ -336,19 +336,5 @@ tool_param_scan_skip:
   calculator:
     expression: [shell_metacharacter]
 memory_key_allowlist: []
-signal_weights:
-  jailbreak_pattern: 0.9
-  instruction_override: 0.85
-  role_escalation: 0.8
-  shell_metacharacter: 0.75
-  path_traversal: 0.75
-  embedded_instruction: 0.65
-  structural_anomaly: 0.40
-  hmac_invalid: 1.0
-  tool:not_allowed: 0.9
-  memory:key_not_allowed: 0.7
-  validate:invalid_hook_type: 1.0
-  validate:missing_provenance: 0.9
-  validate:nil_payload: 1.0
 `, socket, policyDir)
 }

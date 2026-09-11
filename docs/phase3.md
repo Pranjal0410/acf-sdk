@@ -53,7 +53,7 @@ rc.Signals = []Signal{
 }
 ```
 
-The scan stage emits signals with `Score: 0`. The aggregate stage back-fills each signal's score from `SignalWeights` in config. By the time OPA runs, every signal has its full weighted score.
+The scan stage emits signals with `Score: 0`. The aggregate stage back-fills each signal's score from `signal_weights` in `policies/v1/data/policy_config.yaml`. By the time OPA runs, every signal has its full weighted score.
 
 ---
 

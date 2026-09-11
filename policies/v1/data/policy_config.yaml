@@ -1,6 +1,10 @@
-# policy_config.yaml — thresholds, allowlists, and trust weights.
-# Referenced by all four Rego files as data.policy_config.
-# Hot-reloadable: sidecar watches this file and reloads without restart.
+# policy_config.yaml — thresholds, allowlists, trust weights, and signal weights.
+# Loaded into Rego as data.config. signal_weights is also the table the
+# sidecar's aggregate stage scores signals with — the only one; sidecar.yaml
+# no longer carries it. Every category the sidecar or the SDK scanner can emit
+# must appear there, or it scores 0.0 and cannot change a verdict; the
+# signal-weight contract tests (Go and Python) enforce this.
+# Hot-reloadable: the policy engine re-reads this file every 5 seconds.
 
 thresholds:
   block_score: 0.85      # risk score >= this → BLOCK
@@ -27,6 +31,11 @@ destination_allowlist:    # permitted network destinations for tool calls; omit 
 signal_weights:          # per-signal contribution to risk score
   # integrity
   hmac_invalid: 1.0           # always hard block
+
+  # request validation (emitted by the validate stage)
+  validate:invalid_hook_type: 1.0
+  validate:missing_provenance: 0.9
+  validate:nil_payload: 1.0
 
   # catch-all backward-compat signal emitted on every pattern hit
   jailbreak_pattern: 0.9

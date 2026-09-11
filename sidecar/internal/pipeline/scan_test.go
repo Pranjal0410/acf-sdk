@@ -13,9 +13,6 @@ func defaultCfg() *config.Config {
 	return &config.Config{
 		ToolAllowlist:      []string{"search", "calculator"},
 		MemoryKeyAllowlist: []string{},
-		SignalWeights: map[string]float64{
-			"jailbreak_pattern": 0.9,
-		},
 	}
 }
 

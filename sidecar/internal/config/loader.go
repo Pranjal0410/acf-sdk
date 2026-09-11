@@ -47,8 +47,11 @@ type Config struct {
 	// Empty means all keys are permitted.
 	MemoryKeyAllowlist []string `yaml:"memory_key_allowlist"`
 
-	// SignalWeights maps signal names to their contribution to the risk score.
-	SignalWeights map[string]float64 `yaml:"signal_weights"`
+	// DeprecatedSignalWeights catches a signal_weights table left over in
+	// sidecar.yaml. Weights now live in policies/v1/data/policy_config.yaml,
+	// where the policy engine hot-reloads them; a table here is ignored and
+	// main logs a warning, so a local override is never dropped silently.
+	DeprecatedSignalWeights map[string]float64 `yaml:"signal_weights"`
 }
 
 // PipelineConfig controls pipeline execution behaviour.
@@ -170,18 +173,6 @@ func defaults() *Config {
 			"rag":         0.7,
 			"memory_read": 0.6,
 			"memory":      0.6,
-		},
-		SignalWeights: map[string]float64{
-			"jailbreak_pattern":        0.9,
-			"instruction_override":     0.85,
-			"role_escalation":          0.8,
-			"shell_metacharacter":      0.75,
-			"path_traversal":           0.75,
-			"embedded_instruction":     0.65,
-			"structural_anomaly":       0.40,
-			"hmac_invalid":             1.0,
-			"tool:not_allowed":         0.9,
-			"memory:key_not_allowed":   0.7,
 		},
 		ToolAllowlist:      []string{},
 		MemoryKeyAllowlist: []string{},
