@@ -38,24 +38,36 @@ logger = logging.getLogger(__name__)
 #: parameters. Bounds the walk on pathological or hostile payload shapes.
 _MAX_PARAM_DEPTH = 6
 
+#: Ceiling on scannable string fields collected per call. Each field costs
+#: one semantic-scanner invocation, so an unbounded field count on a tool
+#: call with hundreds of text params could push per-call latency well past
+#: the enforcement budget.
+_MAX_SCANNED_FIELDS = 32
+
 
 def _collect_strings(value: Any, out: list[str], depth: int = 0) -> None:
     """Depth-first collect of every non-empty string leaf in a nested value.
 
     Numbers and booleans are skipped — they cannot carry injection text, and
     stringifying them would add noise the scanner's content guard then has to
-    reject.
+    reject. Stops once ``out`` reaches ``_MAX_SCANNED_FIELDS`` so a payload
+    with many fields doesn't walk the whole structure just to discard the
+    excess in the caller.
     """
-    if depth > _MAX_PARAM_DEPTH:
+    if depth > _MAX_PARAM_DEPTH or len(out) >= _MAX_SCANNED_FIELDS:
         return
     if isinstance(value, str):
         if value:
             out.append(value)
     elif isinstance(value, dict):
         for item in value.values():
+            if len(out) >= _MAX_SCANNED_FIELDS:
+                return
             _collect_strings(item, out, depth + 1)
     elif isinstance(value, (list, tuple)):
         for item in value:
+            if len(out) >= _MAX_SCANNED_FIELDS:
+                return
             _collect_strings(item, out, depth + 1)
 
 
@@ -268,6 +280,8 @@ class Firewall:
         texts = self._extract_texts(hook_type, content)
         if not texts:
             return []
+        if len(texts) > _MAX_SCANNED_FIELDS:
+            texts = texts[:_MAX_SCANNED_FIELDS]
 
         # Import the scanner types lazily — only needed when enabled.
         from .scanners import InputType, ScanInput, TrustLevel

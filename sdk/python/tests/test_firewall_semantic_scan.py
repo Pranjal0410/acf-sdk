@@ -411,6 +411,18 @@ class TestExtractTexts:
         assert Firewall._extract_texts("on_prompt", None) == []
         assert Firewall._extract_texts("on_prompt", [1, 2, 3]) == []
 
+    def test_tool_call_field_count_is_capped(self):
+        # Each collected field costs one semantic-scanner call. A tool call
+        # with hundreds of text params must not blow the enforcement budget.
+        params = {f"field_{i}": f"value {i}" for i in range(500)}
+        out = Firewall._extract_texts("on_tool_call", {"name": "x", "params": params})
+        assert len(out) == 32
+
+    def test_tool_call_field_count_cap_applies_across_nested_lists(self):
+        params = {"items": [f"item {i}" for i in range(500)]}
+        out = Firewall._extract_texts("on_tool_call", {"name": "x", "params": params})
+        assert len(out) == 32
+
 
 # ── failure handling ─────────────────────────────────────────────────────────
 
