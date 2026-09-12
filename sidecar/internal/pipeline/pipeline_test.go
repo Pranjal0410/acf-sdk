@@ -30,13 +30,16 @@ func testConfig(strictMode bool) *config.Config {
 		TrustWeights: map[string]float64{
 			"user": 1.0,
 		},
-		SignalWeights: map[string]float64{
-			"jailbreak_pattern":       0.9,
-			"validate:nil_payload":    1.0,
-			"validate:missing_provenance": 0.9,
-		},
 		ToolAllowlist:      []string{},
 		MemoryKeyAllowlist: []string{},
+	}
+}
+
+func testWeights() StaticWeights {
+	return StaticWeights{
+		"jailbreak_pattern":           0.9,
+		"validate:nil_payload":        1.0,
+		"validate:missing_provenance": 0.9,
 	}
 }
 
@@ -45,7 +48,7 @@ func buildPipeline(cfg *config.Config, entries []config.PatternEntry) *Pipeline 
 		NewValidateStage(),
 		NewNormaliseStage(),
 		NewScanStage(cfg, entries),
-		NewAggregateStage(cfg),
+		NewAggregateStage(cfg, testWeights()),
 	})
 }
 
@@ -129,7 +132,8 @@ func TestPipeline_NonStrictCollectsAllSignals(t *testing.T) {
 func TestPipeline_MidBandSanitise(t *testing.T) {
 	cfg := testConfig(true)
 	// Use a signal weight that lands between sanitise and block thresholds.
-	cfg.SignalWeights["embedded_instruction"] = 0.65
+	weights := testWeights()
+	weights["embedded_instruction"] = 0.65
 	// Manually inject the signal to simulate scan output.
 	rc := &riskcontext.RiskContext{
 		HookType:   "on_context",
@@ -138,7 +142,7 @@ func TestPipeline_MidBandSanitise(t *testing.T) {
 		Signals:    []riskcontext.Signal{{Category: "embedded_instruction"}},
 	}
 	// Run only aggregate to test threshold logic directly.
-	agg := NewAggregateStage(cfg)
+	agg := NewAggregateStage(cfg, weights)
 	agg.Run(rc)
 	result := thresholdDecision(rc.Score, cfg.Thresholds)
 	if result != decision.Sanitise {
@@ -166,7 +170,7 @@ func TestPipeline_MockEvaluatorOPAOverridesLowScore(t *testing.T) {
 		NewValidateStage(),
 		NewNormaliseStage(),
 		NewScanStage(cfg, nil),
-		NewAggregateStage(cfg),
+		NewAggregateStage(cfg, testWeights()),
 	}, &mockEvaluator{decision: "BLOCK"})
 
 	rc := &riskcontext.RiskContext{
@@ -187,7 +191,7 @@ func TestPipeline_MockEvaluatorSANITISE_PayloadPopulated(t *testing.T) {
 		NewValidateStage(),
 		NewNormaliseStage(),
 		NewScanStage(cfg, nil),
-		NewAggregateStage(cfg),
+		NewAggregateStage(cfg, testWeights()),
 	}, &mockEvaluator{decision: "SANITISE", targets: []string{"prompt_text"}})
 
 	rc := &riskcontext.RiskContext{
@@ -211,7 +215,7 @@ func TestPipeline_OPAErrorFallsBackToThreshold(t *testing.T) {
 		NewValidateStage(),
 		NewNormaliseStage(),
 		NewScanStage(cfg, nil),
-		NewAggregateStage(cfg),
+		NewAggregateStage(cfg, testWeights()),
 	}, &mockEvaluator{err: errors.New("opa unavailable")})
 
 	rc := &riskcontext.RiskContext{
@@ -232,7 +236,6 @@ func TestPipeline_ProvenanceWeightApplied(t *testing.T) {
 		"user": 1.0,
 		"rag":  0.5, // halved
 	}
-	cfg.SignalWeights["jailbreak_pattern"] = 0.9
 	pl := buildPipeline(cfg, []config.PatternEntry{{Pattern: "ignore all", Category: "jailbreak_pattern"}})
 
 	// Same payload, different provenance — rag should score lower.

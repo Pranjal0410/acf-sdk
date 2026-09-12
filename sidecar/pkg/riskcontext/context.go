@@ -6,7 +6,7 @@ package riskcontext
 
 // Signal is a named risk signal emitted by the scan stage and scored by the
 // aggregate stage. Category identifies the signal type; Score is the weighted
-// contribution (0.0–1.0) filled in by aggregate from SignalWeights config.
+// contribution (0.0–1.0) filled in by aggregate from signal_weights in policy_config.yaml.
 type Signal struct {
 	Category string  `json:"category"`
 	Score    float64 `json:"score"`

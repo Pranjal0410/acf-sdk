@@ -7,6 +7,9 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -57,17 +60,33 @@ func main() {
 	eng, err := policy.NewEngine(cfg.PolicyDir)
 	if err != nil {
 		log.Fatalf("sidecar: failed to initialize OPA engine: %v\n"+
-			"  Check that policy_dir (%s) contains valid .rego files.", err, cfg.PolicyDir)
+			"  Check that policy_dir (%s) has valid .rego files and a data/policy_config.yaml "+
+			"with a signal_weights table.", err, cfg.PolicyDir)
 	}
 	defer eng.Stop()
 	log.Printf("sidecar: OPA engine ready (policy_dir=%s)", cfg.PolicyDir)
+
+	// Signal weights live in policy_config.yaml. A table left in sidecar.yaml
+	// is ignored, so say so rather than dropping a local override silently.
+	if n := len(cfg.DeprecatedSignalWeights); n > 0 {
+		log.Printf("sidecar: warning — signal_weights in %s is ignored (%d entries); "+
+			"weights are read from %s", configPath, n,
+			filepath.Join(cfg.PolicyDir, "data", "policy_config.yaml"))
+	}
+
+	// A pattern category with no weight scores 0.0, so a match in it can never
+	// change a verdict. Surface that once at startup, not per request.
+	if missing := unweightedCategories(patterns.Entries, eng.SignalWeights()); len(missing) > 0 {
+		log.Printf("sidecar: warning — %d jailbreak pattern categories have no signal weight "+
+			"and will score 0.0: %s", len(missing), strings.Join(missing, ", "))
+	}
 
 	// 6. Build the enforcement pipeline.
 	pl := pipeline.NewWithEvaluator(cfg, []pipeline.Stage{
 		pipeline.NewValidateStage(),
 		pipeline.NewNormaliseStage(),
 		pipeline.NewScanStage(cfg, patterns.Entries),
-		pipeline.NewAggregateStage(cfg),
+		pipeline.NewAggregateStage(cfg, eng),
 	}, eng)
 
 	mode := "strict"
@@ -115,4 +134,23 @@ func main() {
 			log.Fatalf("sidecar: listener error: %v", err)
 		}
 	}
+}
+
+// unweightedCategories returns the sorted pattern categories with no entry in
+// weights. Entries without a category fall back to jailbreak_pattern in the
+// scan stage, so they are skipped here.
+func unweightedCategories(entries []config.PatternEntry, weights map[string]float64) []string {
+	seen := map[string]bool{}
+	var missing []string
+	for _, e := range entries {
+		if e.Category == "" || seen[e.Category] {
+			continue
+		}
+		seen[e.Category] = true
+		if _, ok := weights[e.Category]; !ok {
+			missing = append(missing, e.Category)
+		}
+	}
+	sort.Strings(missing)
+	return missing
 }

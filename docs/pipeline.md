@@ -66,7 +66,7 @@ Key invariants:
 - `Payload` is **never mutated** by the pipeline. The original is preserved for the executor.
 - `CanonicalText` is internal to the sidecar — it is never sent on the wire.
 - `Signals` starts empty on inbound. Each stage appends; nothing removes.
-- `Signal.Score` starts at 0 when emitted by scan/validate. Stage 4 fills it in from `SignalWeights`.
+- `Signal.Score` starts at 0 when emitted by scan/validate. Stage 4 fills it in from `signal_weights` in `policies/v1/data/policy_config.yaml`.
 
 ---
 
@@ -187,7 +187,7 @@ Both the automaton and the input text are lowercased before matching (case-insen
 
 If any pattern matches → signal: `{Category: "jailbreak_pattern", Score: 0}`
 
-The score is 0 at emission; Stage 4 fills it in from `SignalWeights["jailbreak_pattern"]` (default: 0.9).
+The score is 0 at emission; Stage 4 fills it in from `signal_weights.jailbreak_pattern` in `policy_config.yaml` (0.9).
 
 ### 2. Tool allowlist (`on_tool_call` only)
 
@@ -214,9 +214,17 @@ Aggregate **never blocks**. It writes `rc.Score` and fills in `Signal.Score` for
 
 ### Signal scoring (back-fill)
 
+Weights come from `signal_weights` in `policies/v1/data/policy_config.yaml`. The
+policy engine loads that table, re-reads it on every hot reload (every 5 seconds),
+and the aggregate stage asks the engine for the current weights. A category that
+is missing from the table contributes 0.0, so the Go and Python signal-weight
+contract tests fail if any category the sidecar or the SDK scanner can emit has no
+weight.
+
 ```go
+weights := engine.SignalWeights()
 for i := range rc.Signals {
-    if w, ok := SignalWeights[rc.Signals[i].Category]; ok {
+    if w, ok := weights[rc.Signals[i].Category]; ok {
         rc.Signals[i].Score = w  // write weight back onto the signal
         if w > maxW { maxW = w }
     }

@@ -4,12 +4,14 @@
 // engine.go — OPA engine.
 // Loads the Rego bundle from the policies directory at startup.
 // Watches for file changes and hot-reloads without restarting.
+// Serves signal_weights from policy_config.yaml to the aggregate stage.
 // Queries the policy matching the RiskContext.HookType field.
 // Returns a structured decision (ALLOW / SANITISE / BLOCK) with sanitise_targets.
 package policy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -47,7 +49,10 @@ type Engine struct {
 	policyDir string
 	mu        sync.RWMutex
 	queries   *preparedQueries
-	stopCh    chan struct{}
+	// weights is signal_weights from policy_config.yaml. It is swapped with
+	// queries on reload and never mutated in place.
+	weights map[string]float64
+	stopCh  chan struct{}
 }
 
 // NewEngine constructs an Engine that loads Rego policies from policyDir.
@@ -114,12 +119,21 @@ func (e *Engine) Stop() {
 	}
 }
 
+// SignalWeights returns the signal weights from the most recent successful
+// load of policy_config.yaml, and satisfies pipeline.WeightSource. The map is
+// replaced wholesale on reload, so callers must not mutate it.
+func (e *Engine) SignalWeights() map[string]float64 {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.weights
+}
+
 // reload compiles all Rego policies and atomically swaps the prepared queries.
 func (e *Engine) reload() error {
 	ctx := context.Background()
 
-	// 1. Load data.config from policy_config.yaml.
-	store, err := loadDataStore(e.policyDir)
+	// 1. Load data.config and the signal weights from policy_config.yaml.
+	store, weights, err := loadPolicyData(e.policyDir)
 	if err != nil {
 		return err
 	}
@@ -156,7 +170,8 @@ func (e *Engine) reload() error {
 		return fmt.Errorf("policy.Engine: compile memory: %w", err)
 	}
 
-	// 4. Atomically swap in the new compiled queries.
+	// 4. Atomically swap in the new compiled queries and weights, under one
+	// lock so the engine never holds queries and weights from different loads.
 	e.mu.Lock()
 	e.queries = &preparedQueries{
 		onPrompt:   onPrompt,
@@ -164,6 +179,7 @@ func (e *Engine) reload() error {
 		onToolCall: onToolCall,
 		onMemory:   onMemory,
 	}
+	e.weights = weights
 	e.mu.Unlock()
 
 	return nil
@@ -210,24 +226,60 @@ func (e *Engine) latestMod() time.Time {
 	return latest
 }
 
-// loadDataStore reads policy_config.yaml and builds an OPA in-memory store
-// with the parsed config available as data.config inside Rego rules.
-func loadDataStore(policyDir string) (storage.Store, error) {
+// loadPolicyData reads policy_config.yaml, builds an OPA in-memory store with
+// the parsed config available as data.config inside Rego rules, and extracts
+// signal_weights for the aggregate stage.
+//
+// The file is required. Without it there are no signal weights: every signal
+// would score 0.0 and every request would be ALLOWed. So a missing or
+// weightless policy_config.yaml fails the load instead of failing open — at
+// startup the sidecar refuses to run, and on hot reload the previous policies
+// stay live.
+func loadPolicyData(policyDir string) (storage.Store, map[string]float64, error) {
 	configPath := filepath.Join(policyDir, "data", "policy_config.yaml")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		// Non-fatal: OPA runs without data.config (allowlists etc. are empty).
-		log.Printf("policy.Engine: cannot read policy_config.yaml: %v (data.config will be empty)", err)
-		return inmem.New(), nil
+		return nil, nil, fmt.Errorf("policy.Engine: cannot read %s: %w", configPath, err)
 	}
 
 	var parsed map[string]any
 	if err := yaml.Unmarshal(data, &parsed); err != nil {
-		return nil, fmt.Errorf("policy.Engine: cannot parse policy_config.yaml: %w", err)
+		return nil, nil, fmt.Errorf("policy.Engine: cannot parse policy_config.yaml: %w", err)
+	}
+
+	weights, err := parseSignalWeights(parsed["signal_weights"])
+	if err != nil {
+		return nil, nil, fmt.Errorf("policy.Engine: %s: %w", configPath, err)
 	}
 
 	store := inmem.NewFromObject(map[string]any{"config": parsed})
-	return store, nil
+	return store, weights, nil
+}
+
+// parseSignalWeights validates the signal_weights table: a non-empty map from
+// signal category to a weight in [0.0, 1.0].
+func parseSignalWeights(raw any) (map[string]float64, error) {
+	table, ok := raw.(map[string]any)
+	if !ok || len(table) == 0 {
+		return nil, errors.New("signal_weights is missing or empty")
+	}
+	weights := make(map[string]float64, len(table))
+	for category, v := range table {
+		var w float64
+		switch n := v.(type) {
+		case float64:
+			w = n
+		case int:
+			w = float64(n)
+		default:
+			return nil, fmt.Errorf("signal_weights.%s: %v is not a number", category, v)
+		}
+		if w < 0 || w > 1 {
+			return nil, fmt.Errorf("signal_weights.%s: %v is outside [0.0, 1.0]", category, w)
+		}
+		weights[category] = w
+	}
+	return weights, nil
 }
 
 // loadModules reads all .rego files (excluding _test.rego) from policyDir

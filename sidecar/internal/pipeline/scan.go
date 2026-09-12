@@ -78,7 +78,7 @@ func (s *ScanStage) Run(rc *riskcontext.RiskContext) (hardBlock bool) {
 
 	// 1. Aho-Corasick lexical scan with per-category signal emission.
 	if s.matcher != nil && len(text) > 0 {
-		hits := s.matcher.Match([]byte(text))
+		hits := s.matcher.MatchThreadSafe([]byte(text))
 		if len(hits) > 0 {
 			seen := make(map[string]bool)
 			for _, idx := range hits {
@@ -122,6 +122,7 @@ func (s *ScanStage) checkToolAllowlist(rc *riskcontext.RiskContext) {
 
 // checkToolDangerousParams scans all string values in the tool params for shell
 // metacharacters and path traversal sequences, emitting signals independently.
+// Checks listed in tool_param_scan_skip for a specific parameter are not run.
 func (s *ScanStage) checkToolDangerousParams(rc *riskcontext.RiskContext) {
 	m, ok := rc.Payload.(map[string]any)
 	if !ok {
@@ -131,37 +132,64 @@ func (s *ScanStage) checkToolDangerousParams(rc *riskcontext.RiskContext) {
 	if !ok {
 		return
 	}
+	toolName, _ := m["name"].(string)
 
-	combined := flattenStrings(params)
-	lower := strings.ToLower(combined)
-
-	for _, seq := range shellMetachars {
-		if strings.Contains(lower, seq) {
-			rc.Signals = append(rc.Signals, riskcontext.Signal{Category: "shell_metacharacter"})
-			break
-		}
+	if s.hasDangerousParam(params, toolName, "shell_metacharacter", shellMetachars) {
+		rc.Signals = append(rc.Signals, riskcontext.Signal{Category: "shell_metacharacter"})
 	}
 
-	for _, seq := range pathTraversalPatterns {
-		if strings.Contains(lower, seq) {
-			rc.Signals = append(rc.Signals, riskcontext.Signal{Category: "path_traversal"})
-			break
-		}
+	if s.hasDangerousParam(params, toolName, "path_traversal", pathTraversalPatterns) {
+		rc.Signals = append(rc.Signals, riskcontext.Signal{Category: "path_traversal"})
 	}
 }
 
+func (s *ScanStage) hasDangerousParam(params map[string]any, toolName, check string, patterns []string) bool {
+	for paramName, value := range params {
+		_, isString := value.(string)
+		if isString && s.cfg.ParamScanSkipped(toolName, paramName, check) {
+			continue
+		}
+		lower := strings.ToLower(flattenStrings(map[string]any{paramName: value}))
+		for _, seq := range patterns {
+			if strings.Contains(lower, seq) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // flattenStrings recursively collects all string leaf values from a map.
+// Slices are walked too: JSON arrays are ordinary tool parameters (argv-style
+// args, path lists), and skipping them let a payload evade the dangerous-param
+// checks simply by being wrapped in [].
 func flattenStrings(m map[string]any) string {
 	var parts []string
 	for _, v := range m {
-		switch val := v.(type) {
-		case string:
-			parts = append(parts, val)
-		case map[string]any:
-			parts = append(parts, flattenStrings(val))
+		if s := flattenValue(v); s != "" {
+			parts = append(parts, s)
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// flattenValue collects string leaves from any JSON-shaped value.
+func flattenValue(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case map[string]any:
+		return flattenStrings(val)
+	case []any:
+		var parts []string
+		for _, item := range val {
+			if s := flattenValue(item); s != "" {
+				parts = append(parts, s)
+			}
+		}
+		return strings.Join(parts, " ")
+	}
+	return ""
 }
 
 // checkMemoryAllowlist emits a signal if the memory key is not in the allowlist.
